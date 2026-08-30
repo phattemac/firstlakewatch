@@ -5,6 +5,10 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 
+from services.samples import get_sample_history
+from services.latest_samples import get_latest_ecoli
+from services.stations import get_stations
+
 # --------------------------------------------------
 # Helper Functions
 # --------------------------------------------------
@@ -16,93 +20,27 @@ def ecoli_color(value):
         return "yellow"
     elif value <= 100:
         return "orange"
-    return "red"
+    else:
+        return "red"
 
 
 def status_icon(color):
-    icons = {
+    return {
         "green": "🟢",
         "yellow": "🟡",
         "orange": "🟠",
         "red": "🔴"
-    }
-    return icons.get(color, "⚪")
+    }.get(color, "⚪")
 
 
 # --------------------------------------------------
-# Sample Stations
+# Load Stations
 # --------------------------------------------------
 
-stations = [
-    {
-        "name": "Deep Basin",
-        "lat": 44.7725,
-        "lon": -63.6685,
-        "sample_date": "2026-08-24",
-        "ecoli": 4,
-        "ph": 7.9,
-        "do": 8.0,
-        "temp": 23.8,
-        "cond": 0.46
-    },
-    {
-        "name": "Beach Area",
-        "lat": 44.7739,
-        "lon": -63.6710,
-        "sample_date": "2026-08-20",
-        "ecoli": 18,
-        "ph": 8.1,
-        "do": 7.5,
-        "temp": 24.1,
-        "cond": 0.51
-    },
-    {
-        "name": "Sucker Brook",
-        "lat": 44.7692,
-        "lon": -63.6595,
-        "sample_date": "2026-08-15",
-        "ecoli": 125,
-        "ph": 7.2,
-        "do": 5.9,
-        "temp": 21.0,
-        "cond": 0.63
-    }
-]
-
-# --------------------------------------------------
-# Historical Data
-# --------------------------------------------------
-
-historical_data = {
-    "Deep Basin": {
-        "Date": ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-24"],
-        "E.coli": [2, 3, 5, 4],
-        "pH": [8.1, 8.0, 7.8, 7.9],
-        "DO": [10.5, 9.2, 8.7, 8.0],
-        "Temperature": [11.5, 16.2, 21.1, 23.8]
-    },
-    "Beach Area": {
-        "Date": ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-20"],
-        "E.coli": [10, 15, 20, 18],
-        "pH": [8.2, 8.1, 8.0, 8.1],
-        "DO": [9.8, 8.8, 7.9, 7.5],
-        "Temperature": [12.0, 17.5, 22.3, 24.1]
-    },
-    "Sucker Brook": {
-        "Date": ["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-15"],
-        "E.coli": [40, 60, 90, 125],
-        "pH": [7.4, 7.3, 7.3, 7.2],
-        "DO": [7.1, 6.5, 6.1, 5.9],
-        "Temperature": [10.5, 15.8, 19.5, 21.0]
-    }
-}
-
-# --------------------------------------------------
-# Session State
-# --------------------------------------------------
+stations = get_stations()
 
 if "selected_station" not in st.session_state:
-    st.session_state.selected_station = "Deep Basin"
+    st.session_state.selected_station = stations[0]["name"]
 
 # --------------------------------------------------
 # Page Header
@@ -140,22 +78,30 @@ with col1:
 
     for station in stations:
 
-        color = ecoli_color(station["ecoli"])
+        latest = get_latest_ecoli(station["id"])
 
-        radius = 18 if (
-            station["name"]
-            == st.session_state.selected_station
-        ) else 10
+        ecoli_value = latest["value"] if latest else 0
+
+        color = ecoli_color(ecoli_value)
+
+        radius = (
+            18
+            if station["name"] == st.session_state.selected_station
+            else 10
+        )
 
         folium.CircleMarker(
-            location=[station["lat"], station["lon"]],
+            location=[
+                station["latitude"],
+                station["longitude"]
+            ],
             radius=radius,
             color=color,
             fill=True,
             fill_color=color,
             fill_opacity=0.8,
             tooltip=station["name"],
-            popup=station["name"]
+            popup=f"{station['name']}<br>E.coli: {ecoli_value}"
         ).add_to(m)
 
     map_data = st_folium(
@@ -182,22 +128,23 @@ with col1:
 # --------------------------------------------------
 
 selected_station = next(
-    station
-    for station in stations
-    if station["name"] == st.session_state.selected_station
+    s
+    for s in stations
+    if s["name"] == st.session_state.selected_station
 )
 
-sample_date = datetime.strptime(
-    selected_station["sample_date"],
-    "%Y-%m-%d"
-)
+latest = get_latest_ecoli(selected_station["id"])
+
+sample_date = latest["sample_date"]
+ecoli_value = latest["value"]
 
 days_old = (
-    datetime.now() - sample_date
+    datetime.now()
+    - datetime.strptime(sample_date, "%Y-%m-%d")
 ).days
 
 # --------------------------------------------------
-# DETAILS PANEL
+# Details Panel
 # --------------------------------------------------
 
 with col2:
@@ -206,7 +153,7 @@ with col2:
 
     st.metric(
         "Last Sample",
-        selected_station["sample_date"]
+        sample_date
     )
 
     st.metric(
@@ -223,87 +170,42 @@ with col2:
 
     st.divider()
 
-    ecoli_status = ecoli_color(
-        selected_station["ecoli"]
-    )
+    ecoli_status = ecoli_color(ecoli_value)
 
     st.write(
-        f"{status_icon(ecoli_status)} E. coli: {selected_station['ecoli']} CFU/100mL"
+        f"{status_icon(ecoli_status)} E.coli: {ecoli_value} CFU/100mL"
     )
 
-    ph_status = (
-        "green"
-        if 6.5 <= selected_station["ph"] <= 8.5
-        else "red"
-    )
-
-    st.write(
-        f"{status_icon(ph_status)} pH: {selected_station['ph']}"
-    )
-
-    do_status = (
-        "green"
-        if selected_station["do"] >= 8
-        else "yellow"
-        if selected_station["do"] >= 6
-        else "red"
-    )
-
-    st.write(
-        f"{status_icon(do_status)} Dissolved Oxygen: {selected_station['do']} mg/L"
-    )
-
-    temp_status = (
-        "green"
-        if selected_station["temp"] < 25
-        else "orange"
-    )
-
-    st.write(
-        f"{status_icon(temp_status)} Temperature: {selected_station['temp']} °C"
-    )
-
-    cond_status = (
-        "green"
-        if selected_station["cond"] < 0.5
-        else "yellow"
-        if selected_station["cond"] < 0.75
-        else "red"
-    )
-
-    st.write(
-        f"{status_icon(cond_status)} Conductivity: {selected_station['cond']} mS/cm"
-    )
+    st.write("⚪ pH: No data")
+    st.write("⚪ Dissolved Oxygen: No data")
+    st.write("⚪ Temperature: No data")
+    st.write("⚪ Conductivity: No data")
 
     st.divider()
 
     st.subheader("Historical Trend")
 
-    chart_parameter = st.selectbox(
-        "Parameter",
-        [
-            "E.coli",
-            "pH",
-            "DO",
-            "Temperature"
-        ]
+    rows = get_sample_history(
+        selected_station["id"],
+        "E.coli"
     )
 
-    station_history = historical_data[
-        selected_station["name"]
-    ]
+    chart_df = pd.DataFrame(rows)
 
-    chart_df = pd.DataFrame({
-        "Date": station_history["Date"],
-        "Value": station_history[chart_parameter]
-    })
+    chart_df.rename(
+        columns={
+            "sample_date": "Date",
+            "value": "Value"
+        },
+        inplace=True
+    )
 
     fig = px.line(
         chart_df,
         x="Date",
         y="Value",
         markers=True,
-        title=f"{selected_station['name']} - {chart_parameter}"
+        title=f"{selected_station['name']} - E.coli"
     )
 
     st.plotly_chart(fig)
@@ -312,14 +214,19 @@ with col2:
 
     st.subheader("Monitoring Location")
 
-    st.write(f"Latitude: {selected_station['lat']}")
-    st.write(f"Longitude: {selected_station['lon']}")
+    st.write(
+        f"Latitude: {selected_station['latitude']}"
+    )
+
+    st.write(
+        f"Longitude: {selected_station['longitude']}"
+    )
 
     st.divider()
 
-    if selected_station["ecoli"] > 100:
+    if ecoli_value > 100:
         st.error("🔴 Overall Status: Poor")
-    elif selected_station["ecoli"] > 50:
+    elif ecoli_value > 50:
         st.warning("🟠 Overall Status: Fair")
     else:
         st.success("🟢 Overall Status: Good")
