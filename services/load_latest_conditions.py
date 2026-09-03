@@ -14,8 +14,19 @@ from config.settings import DATASTREAM_API_KEY
 
 set_api_key(DATASTREAM_API_KEY)
 
-LOCATION_ID = 907725
-MONITORING_LOCATION_ID = "FIR_SD"
+from services.get_location import (
+    get_location
+)
+
+location = get_location(
+    "FIR_SD"
+)
+
+LOCATION_ID = location["datastream_id"]
+
+MONITORING_LOCATION_ID = (
+    location["monitoring_location_id"]
+)
 
 wanted = {
     "pH",
