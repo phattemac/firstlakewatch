@@ -8,6 +8,9 @@ import plotly.express as px
 from services.samples import get_sample_history
 from services.latest_samples import get_latest_parameter
 from services.stations import get_stations
+from services.get_latest_conditions import (
+    get_latest_conditions
+)
 
 
 def ecoli_color(value):
@@ -69,16 +72,15 @@ with col1:
 
     m.fit_bounds(bounds)
 
-    # First Lake Monitoring Zone
     folium.Polygon(
         locations=[
-            [44.7780, -63.6760], # northwest
-            [44.7780, -63.6620], # top shoulder
-            [44.7700, -63.6480], # northeast cut
-            [44.7625, -63.6480], # southeas
-            [44.7630, -63.6615], # move east again
-            [44.7700, -63.6760] # move north on west side
-            ],
+            [44.7780, -63.6760],
+            [44.7780, -63.6620],
+            [44.7700, -63.6480],
+            [44.7625, -63.6480],
+            [44.7630, -63.6615],
+            [44.7700, -63.6760]
+        ],
         color="blue",
         weight=3,
         fill=True,
@@ -125,7 +127,9 @@ with col1:
 
     if (
         map_data
-        and map_data.get("last_object_clicked_tooltip")
+        and map_data.get(
+            "last_object_clicked_tooltip"
+        )
     ):
 
         clicked_station = map_data[
@@ -149,11 +153,6 @@ selected_station = next(
 latest_ecoli = get_latest_parameter(
     selected_station["id"],
     "E.coli"
-)
-
-latest_ph = get_latest_parameter(
-    selected_station["id"],
-    "pH"
 )
 
 sample_date = latest_ecoli["sample_date"]
@@ -190,28 +189,55 @@ with col2:
         f"{status_icon(ecoli_status)} E.coli: {ecoli_value}"
     )
 
-    if latest_ph:
+    conditions = get_latest_conditions()
 
-        ph_value = latest_ph["value"]
+    for condition in conditions:
 
-        if 6.5 <= ph_value <= 8.5:
-            ph_icon = "🟢"
-        else:
-            ph_icon = "🔴"
+        name = condition["characteristic_name"]
+        value = condition["value"]
+        unit = condition["unit"]
 
-        st.write(
-            f"{ph_icon} pH: {ph_value}"
-        )
+        if name == "pH":
 
-    else:
+            icon = (
+                "🟢"
+                if 6.5 <= value <= 8.5
+                else "🔴"
+            )
 
-        st.write(
-            "⚪ pH: No data"
-        )
+            st.write(
+                f"{icon} pH: {value}"
+            )
 
-    st.write("⚪ Dissolved Oxygen: No data")
-    st.write("⚪ Temperature: No data")
-    st.write("⚪ Conductivity: No data")
+        elif name == "Dissolved oxygen (DO)":
+
+            st.write(
+                f"🫧 Dissolved Oxygen: {value} {unit}"
+            )
+
+        elif name == "Temperature, water":
+
+            st.write(
+                f"🌡️ Water Temperature: {value} °C"
+            )
+
+        elif name == "Specific conductance":
+
+            st.write(
+                f"⚡ Conductivity: {value} {unit}"
+            )
+
+        elif name == "Total Phosphorus, mixed forms":
+
+            st.write(
+                f"🧪 Total Phosphorus: {value} {unit}"
+            )
+
+        elif name == "Chlorophyll a, corrected for pheophytin":
+
+            st.write(
+                f"🌿 Chlorophyll a: {value} {unit}"
+            )
 
     st.divider()
 
@@ -244,7 +270,8 @@ with col2:
 
         st.plotly_chart(
             fig,
-            use_container_width=True
+            use_container_width=True,
+            key=f"ecoli_chart_{selected_station['id']}"
         )
 
     st.divider()
