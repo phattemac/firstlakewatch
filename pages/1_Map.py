@@ -6,12 +6,9 @@ import pandas as pd
 import plotly.express as px
 
 from services.samples import get_sample_history
-from services.latest_samples import get_latest_ecoli
+from services.latest_samples import get_latest_parameter
 from services.stations import get_stations
 
-# --------------------------------------------------
-# Helper Functions
-# --------------------------------------------------
 
 def ecoli_color(value):
     if value <= 10:
@@ -33,18 +30,14 @@ def status_icon(color):
     }.get(color, "⚪")
 
 
-# --------------------------------------------------
-# Load Stations
-# --------------------------------------------------
-
 stations = get_stations()
+
+if not stations:
+    st.error("No stations found in database.")
+    st.stop()
 
 if "selected_station" not in st.session_state:
     st.session_state.selected_station = stations[0]["name"]
-
-# --------------------------------------------------
-# Page Header
-# --------------------------------------------------
 
 st.title("🗺️ Monitoring Locations")
 
@@ -70,15 +63,35 @@ with col1:
     ).add_to(m)
 
     bounds = [
-        [44.7665, -63.6780],
-        [44.7805, -63.6540]
+        [44.7625, -63.6760],
+        [44.7780, -63.6480]
     ]
 
     m.fit_bounds(bounds)
 
+    # First Lake Monitoring Zone
+    folium.Polygon(
+        locations=[
+            [44.7780, -63.6760], # northwest
+            [44.7780, -63.6620], # top shoulder
+            [44.7700, -63.6480], # northeast cut
+            [44.7625, -63.6480], # southeas
+            [44.7630, -63.6615], # move east again
+            [44.7700, -63.6760] # move north on west side
+            ],
+        color="blue",
+        weight=3,
+        fill=True,
+        fill_opacity=0.15,
+        popup="First Lake Monitoring Zone"
+    ).add_to(m)
+
     for station in stations:
 
-        latest = get_latest_ecoli(station["id"])
+        latest = get_latest_parameter(
+            station["id"],
+            "E.coli"
+        )
 
         ecoli_value = latest["value"] if latest else 0
 
@@ -124,7 +137,7 @@ with col1:
             st.rerun()
 
 # --------------------------------------------------
-# Selected Station
+# SELECTED STATION
 # --------------------------------------------------
 
 selected_station = next(
@@ -133,10 +146,18 @@ selected_station = next(
     if s["name"] == st.session_state.selected_station
 )
 
-latest = get_latest_ecoli(selected_station["id"])
+latest_ecoli = get_latest_parameter(
+    selected_station["id"],
+    "E.coli"
+)
 
-sample_date = latest["sample_date"]
-ecoli_value = latest["value"]
+latest_ph = get_latest_parameter(
+    selected_station["id"],
+    "pH"
+)
+
+sample_date = latest_ecoli["sample_date"]
+ecoli_value = latest_ecoli["value"]
 
 days_old = (
     datetime.now()
@@ -144,7 +165,7 @@ days_old = (
 ).days
 
 # --------------------------------------------------
-# Details Panel
+# DETAILS PANEL
 # --------------------------------------------------
 
 with col2:
@@ -161,29 +182,40 @@ with col2:
         days_old
     )
 
-    if days_old <= 7:
-        st.success("🟢 Fresh Data")
-    elif days_old <= 30:
-        st.warning("🟡 Aging Data")
-    else:
-        st.error("🔴 Stale Data")
-
-    st.divider()
-
-    ecoli_status = ecoli_color(ecoli_value)
-
-    st.write(
-        f"{status_icon(ecoli_status)} E.coli: {ecoli_value} CFU/100mL"
+    ecoli_status = ecoli_color(
+        ecoli_value
     )
 
-    st.write("⚪ pH: No data")
+    st.write(
+        f"{status_icon(ecoli_status)} E.coli: {ecoli_value}"
+    )
+
+    if latest_ph:
+
+        ph_value = latest_ph["value"]
+
+        if 6.5 <= ph_value <= 8.5:
+            ph_icon = "🟢"
+        else:
+            ph_icon = "🔴"
+
+        st.write(
+            f"{ph_icon} pH: {ph_value}"
+        )
+
+    else:
+
+        st.write(
+            "⚪ pH: No data"
+        )
+
     st.write("⚪ Dissolved Oxygen: No data")
     st.write("⚪ Temperature: No data")
     st.write("⚪ Conductivity: No data")
 
     st.divider()
 
-    st.subheader("Historical Trend")
+    st.subheader("Historical E.coli Trend")
 
     rows = get_sample_history(
         selected_station["id"],
@@ -192,27 +224,32 @@ with col2:
 
     chart_df = pd.DataFrame(rows)
 
-    chart_df.rename(
-        columns={
-            "sample_date": "Date",
-            "value": "Value"
-        },
-        inplace=True
-    )
+    if not chart_df.empty:
 
-    fig = px.line(
-        chart_df,
-        x="Date",
-        y="Value",
-        markers=True,
-        title=f"{selected_station['name']} - E.coli"
-    )
+        chart_df.rename(
+            columns={
+                "sample_date": "Date",
+                "value": "Value"
+            },
+            inplace=True
+        )
 
-    st.plotly_chart(fig)
+        fig = px.line(
+            chart_df,
+            x="Date",
+            y="Value",
+            markers=True,
+            title=f"{selected_station['name']} - E.coli"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
     st.divider()
 
-    st.subheader("Monitoring Location")
+    st.subheader("Location")
 
     st.write(
         f"Latitude: {selected_station['latitude']}"

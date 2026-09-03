@@ -3,7 +3,7 @@ import sqlite3
 DB_PATH = "database/firstlake.db"
 
 
-def get_latest_ecoli(station_id):
+def get_latest_parameter(station_id, parameter):
 
     conn = sqlite3.connect(DB_PATH)
 
@@ -15,14 +15,15 @@ def get_latest_ecoli(station_id):
         """
         SELECT
             sample_date,
-            value
+            value,
+            parameter
         FROM samples
         WHERE station_id = ?
-        AND parameter = 'E.coli'
+        AND parameter = ?
         ORDER BY sample_date DESC
         LIMIT 1
         """,
-        (station_id,)
+        (station_id, parameter)
     )
 
     row = cursor.fetchone()
@@ -33,3 +34,11 @@ def get_latest_ecoli(station_id):
         return dict(row)
 
     return None
+
+
+if __name__ == "__main__":
+
+    print("Station 1 pH:")
+    print(get_latest_parameter(1, "pH"))
+
+  
