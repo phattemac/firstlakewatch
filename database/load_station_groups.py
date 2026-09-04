@@ -10,7 +10,7 @@ groups = [
 
     ("FIR_SD", "DEEP_WATER"),
 
-    ("FLDS-1", "SURFACE"),
+    ("FLDS-1", "DEEP_WATER"),
     ("FLDS-2", "SURFACE"),
     ("FLDS-3", "SURFACE"),
 
