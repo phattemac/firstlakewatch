@@ -90,7 +90,7 @@ for (
             "Large chemistry suite"
         )
 
-    # Bacteria stations
+        # Bacteria stations
     elif has_ecoli:
 
         classification = (
@@ -99,6 +99,18 @@ for (
 
         reason = (
             "Contains Escherichia coli"
+        )
+
+    # Basic field monitoring
+    elif parameter_count >= 8:
+
+        classification = (
+            "FIELD_MONITORING"
+        )
+
+        reason = (
+            "Core water quality "
+            "parameters"
         )
 
     cursor.execute(
